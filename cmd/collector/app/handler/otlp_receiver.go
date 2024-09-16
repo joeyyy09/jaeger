@@ -9,14 +9,17 @@ import (
 
 	otlp2jaeger "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/jaeger"
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/config/configgrpc"
 	"go.opentelemetry.io/collector/config/confighttp"
+	"go.opentelemetry.io/collector/config/configtelemetry"
 	"go.opentelemetry.io/collector/config/configtls"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/extension"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/otlpreceiver"
+	"go.opentelemetry.io/otel/metric"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	nooptrace "go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/zap"
@@ -61,7 +64,7 @@ func startOTLPReceiver(
 	otlpReceiverConfig := otlpFactory.CreateDefaultConfig().(*otlpreceiver.Config)
 	applyGRPCSettings(otlpReceiverConfig.GRPC, &options.OTLP.GRPC)
 	applyHTTPSettings(otlpReceiverConfig.HTTP.ServerConfig, &options.OTLP.HTTP)
-	statusReporter := func(ev *component.StatusEvent) {
+	statusReporter := func(ev *componentstatus.Event) {
 		// TODO this could be wired into changing healthcheck.HealthCheck
 		logger.Info("OTLP receiver status change", zap.Stringer("status", ev.Status()))
 	}
@@ -69,8 +72,11 @@ func startOTLPReceiver(
 		TelemetrySettings: component.TelemetrySettings{
 			Logger:         logger,
 			TracerProvider: nooptrace.NewTracerProvider(),
-			MeterProvider:  noopmetric.NewMeterProvider(), // TODO wire this with jaegerlib metrics?
-			ReportStatus:   statusReporter,
+			// TODO wire this with jaegerlib metrics?
+			LeveledMeterProvider: func(_ configtelemetry.Level) metric.MeterProvider {
+				return noopmetric.NewMeterProvider()
+			},
+			MeterProvider: noopmetric.NewMeterProvider(),
 		},
 	}
 
@@ -89,7 +95,7 @@ func startOTLPReceiver(
 	if err != nil {
 		return nil, fmt.Errorf("could not create the OTLP receiver: %w", err)
 	}
-	if err := otlpReceiver.Start(context.Background(), &otelHost{logger: logger}); err != nil {
+	if err := otlpReceiver.Start(context.Background(), &otelHost{logger: logger, reportFunc: statusReporter}); err != nil {
 		return nil, fmt.Errorf("could not start the OTLP receiver: %w", err)
 	}
 	return otlpReceiver, nil
@@ -103,7 +109,7 @@ func applyGRPCSettings(cfg *configgrpc.ServerConfig, opts *flags.GRPCOptions) {
 		cfg.TLSSetting = applyTLSSettings(&opts.TLS)
 	}
 	if opts.MaxReceiveMessageLength > 0 {
-		cfg.MaxRecvMsgSizeMiB = uint64(opts.MaxReceiveMessageLength / (1024 * 1024))
+		cfg.MaxRecvMsgSizeMiB = int(opts.MaxReceiveMessageLength / (1024 * 1024))
 	}
 	if opts.MaxConnectionAge != 0 || opts.MaxConnectionAgeGrace != 0 {
 		cfg.Keepalive = &configgrpc.KeepaliveServerConfig{
@@ -173,9 +179,13 @@ func (c *consumerDelegate) consume(ctx context.Context, td ptrace.Traces) error 
 	return nil
 }
 
+var _ componentstatus.Reporter = (*otelHost)(nil)
+
 // otelHost is a mostly no-op implementation of OTEL component.Host
 type otelHost struct {
 	logger *zap.Logger
+
+	reportFunc func(event *componentstatus.Event)
 }
 
 func (h *otelHost) ReportFatalError(err error) {
@@ -192,4 +202,8 @@ func (*otelHost) GetExtensions() map[component.ID]extension.Extension {
 
 func (*otelHost) GetExporters() map[component.DataType]map[component.ID]component.Component {
 	return nil
+}
+
+func (h *otelHost) Report(event *componentstatus.Event) {
+	h.reportFunc(event)
 }

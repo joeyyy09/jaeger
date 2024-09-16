@@ -8,6 +8,7 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/kafkaexporter"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/prometheusexporter"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckv2extension"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/tailsamplingprocessor"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jaegerreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kafkareceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zipkinreceiver"
@@ -29,6 +30,7 @@ import (
 	"go.opentelemetry.io/collector/receiver/otlpreceiver"
 
 	"github.com/jaegertracing/jaeger/cmd/jaeger/internal/exporters/storageexporter"
+	"github.com/jaegertracing/jaeger/cmd/jaeger/internal/extension/expvar"
 	"github.com/jaegertracing/jaeger/cmd/jaeger/internal/extension/jaegerquery"
 	"github.com/jaegertracing/jaeger/cmd/jaeger/internal/extension/jaegerstorage"
 	"github.com/jaegertracing/jaeger/cmd/jaeger/internal/extension/remotesampling"
@@ -68,6 +70,7 @@ func (b builders) build() (otelcol.Factories, error) {
 		jaegerstorage.NewFactory(),
 		storagecleaner.NewFactory(),
 		remotesampling.NewFactory(),
+		expvar.NewFactory(),
 	)
 	if err != nil {
 		return otelcol.Factories{}, err
@@ -104,6 +107,7 @@ func (b builders) build() (otelcol.Factories, error) {
 		// standard
 		batchprocessor.NewFactory(),
 		memorylimiterprocessor.NewFactory(),
+		tailsamplingprocessor.NewFactory(),
 		// add-ons
 		adaptivesampling.NewFactory(),
 	)

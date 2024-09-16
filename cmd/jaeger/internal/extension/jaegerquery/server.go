@@ -9,7 +9,9 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/extension"
+	"go.opentelemetry.io/collector/extension/extensioncapabilities"
 
 	"github.com/jaegertracing/jaeger/cmd/jaeger/internal/extension/jaegerstorage"
 	queryApp "github.com/jaegertracing/jaeger/cmd/query/app"
@@ -25,8 +27,8 @@ import (
 )
 
 var (
-	_ extension.Extension = (*server)(nil)
-	_ extension.Dependent = (*server)(nil)
+	_ extension.Extension             = (*server)(nil)
+	_ extensioncapabilities.Dependent = (*server)(nil)
 )
 
 type server struct {
@@ -43,7 +45,8 @@ func newServer(config *Config, otel component.TelemetrySettings) *server {
 	}
 }
 
-// Dependencies implements extension.Dependent to ensure this always starts after jaegerstorage extension.
+// Dependencies implements extensioncapabilities.Dependent
+// to ensure this always starts after jaegerstorage extension.
 func (*server) Dependencies() []component.ID {
 	return []component.ID{jaegerstorage.ID}
 }
@@ -94,7 +97,9 @@ func (s *server) Start(_ context.Context, host component.Host) error {
 		Logger:         s.telset.Logger,
 		TracerProvider: tracerProvider.OTEL,
 		Metrics:        queryMetricsFactory,
-		ReportStatus:   s.telset.ReportStatus,
+		ReportStatus: func(event *componentstatus.Event) {
+			componentstatus.ReportStatus(host, event)
+		},
 	}
 
 	// TODO contextcheck linter complains about next line that context is not passed. It is not wrong.

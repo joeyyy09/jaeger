@@ -1,5 +1,5 @@
 service:
-  extensions: [jaeger_storage, jaeger_query]
+  extensions: [jaeger_storage, jaeger_query, healthcheckv2]
   pipelines:
     traces:
       receivers: [otlp]
@@ -7,6 +7,10 @@ service:
       exporters: [jaeger_storage_exporter]
 
 extensions:
+  healthcheckv2:
+    use_v2: true
+    http:
+
   jaeger_query:
     trace_storage: some_store
     trace_storage_archive: another_store
@@ -16,13 +20,15 @@ extensions:
     backends:
       some_store:
         badger:
-          directory_key: "/tmp/jaeger/"
-          directory_value: "/tmp/jaeger/"
+          directories:
+            keys: "/tmp/jaeger/"
+            values: "/tmp/jaeger/"
           ephemeral: false
       another_store:
         badger:
-          directory_key: "/tmp/jaeger_archive/"
-          directory_value: "/tmp/jaeger_archive/"
+          directories:
+            keys: "/tmp/jaeger_archive/"
+            values: "/tmp/jaeger_archive/"
           ephemeral: false
 
 receivers:
