@@ -12,10 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/config/configtelemetry"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/extension"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	"go.opentelemetry.io/otel/metric"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	nooptrace "go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/zap/zaptest"
@@ -104,7 +106,10 @@ func TestExporter(t *testing.T) {
 	telemetrySettings := component.TelemetrySettings{
 		Logger:         zaptest.NewLogger(t),
 		TracerProvider: nooptrace.NewTracerProvider(),
-		MeterProvider:  noopmetric.NewMeterProvider(),
+		LeveledMeterProvider: func(_ configtelemetry.Level) metric.MeterProvider {
+			return noopmetric.NewMeterProvider()
+		},
+		MeterProvider: noopmetric.NewMeterProvider(),
 	}
 
 	const memstoreName = "memstore"
@@ -114,7 +119,7 @@ func TestExporter(t *testing.T) {
 	err := config.Validate()
 	require.NoError(t, err)
 
-	tracesExporter, err := exporterFactory.CreateTracesExporter(ctx, exporter.Settings{
+	tracesExporter, err := exporterFactory.CreateTraces(ctx, exporter.Settings{
 		ID:                ID,
 		TelemetrySettings: telemetrySettings,
 		BuildInfo:         component.NewDefaultBuildInfo(),
@@ -152,16 +157,22 @@ func TestExporter(t *testing.T) {
 	requiredTrace, err := spanReader.GetTrace(ctx, requiredTraceID)
 	require.NoError(t, err)
 	assert.Equal(t, spanID.String(), requiredTrace.Spans[0].SpanID.String())
+
+	// check that the service name attribute was added by the sanitizer
+	require.Equal(t, "missing-service-name", requiredTrace.Spans[0].Process.ServiceName)
 }
 
 func makeStorageExtension(t *testing.T, memstoreName string) component.Host {
 	telemetrySettings := component.TelemetrySettings{
 		Logger:         zaptest.NewLogger(t),
 		TracerProvider: nooptrace.NewTracerProvider(),
-		MeterProvider:  noopmetric.NewMeterProvider(),
+		LeveledMeterProvider: func(_ configtelemetry.Level) metric.MeterProvider {
+			return noopmetric.NewMeterProvider()
+		},
+		MeterProvider: noopmetric.NewMeterProvider(),
 	}
 	extensionFactory := jaegerstorage.NewFactory()
-	storageExtension, err := extensionFactory.CreateExtension(
+	storageExtension, err := extensionFactory.Create(
 		context.Background(),
 		extension.Settings{
 			TelemetrySettings: telemetrySettings,

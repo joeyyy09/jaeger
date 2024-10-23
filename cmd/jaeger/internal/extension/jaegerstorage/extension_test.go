@@ -16,7 +16,9 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/configgrpc"
+	"go.opentelemetry.io/collector/config/configtelemetry"
 	"go.opentelemetry.io/collector/extension"
+	"go.opentelemetry.io/otel/metric"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	nooptrace "go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/zap"
@@ -123,7 +125,7 @@ func TestBadger(t *testing.T) {
 	ext := makeStorageExtenion(t, &Config{
 		Backends: map[string]Backend{
 			"foo": {
-				Badger: &badger.NamespaceConfig{
+				Badger: &badger.Config{
 					Ephemeral:             true,
 					MaintenanceInterval:   5,
 					MetricsUpdateInterval: 10,
@@ -141,7 +143,7 @@ func TestGRPC(t *testing.T) {
 	ext := makeStorageExtenion(t, &Config{
 		Backends: map[string]Backend{
 			"foo": {
-				GRPC: &grpc.ConfigV2{
+				GRPC: &grpc.Config{
 					ClientConfig: configgrpc.ClientConfig{
 						Endpoint: "localhost:12345",
 					},
@@ -254,14 +256,17 @@ func noopTelemetrySettings() component.TelemetrySettings {
 	return component.TelemetrySettings{
 		Logger:         zap.L(),
 		TracerProvider: nooptrace.NewTracerProvider(),
-		MeterProvider:  noopmetric.NewMeterProvider(),
+		LeveledMeterProvider: func(_ configtelemetry.Level) metric.MeterProvider {
+			return noopmetric.NewMeterProvider()
+		},
+		MeterProvider: noopmetric.NewMeterProvider(),
 	}
 }
 
 func makeStorageExtenion(t *testing.T, config *Config) component.Component {
 	extensionFactory := NewFactory()
 	ctx := context.Background()
-	ext, err := extensionFactory.CreateExtension(ctx,
+	ext, err := extensionFactory.Create(ctx,
 		extension.Settings{
 			ID:                ID,
 			TelemetrySettings: noopTelemetrySettings(),

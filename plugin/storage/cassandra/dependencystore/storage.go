@@ -76,8 +76,9 @@ func (s *DependencyStore) WriteDependencies(ts time.Time, dependencies []model.D
 	deps := make([]Dependency, len(dependencies))
 	for i, d := range dependencies {
 		deps[i] = Dependency{
-			Parent:    d.Parent,
-			Child:     d.Child,
+			Parent: d.Parent,
+			Child:  d.Child,
+			//nolint: gosec // G115
 			CallCount: int64(d.CallCount),
 			Source:    string(d.Source),
 		}
@@ -111,8 +112,9 @@ func (s *DependencyStore) GetDependencies(_ context.Context, endTs time.Time, lo
 	for iter.Scan(&ts, &dependencies) {
 		for _, dependency := range dependencies {
 			dl := model.DependencyLink{
-				Parent:    dependency.Parent,
-				Child:     dependency.Child,
+				Parent: dependency.Parent,
+				Child:  dependency.Child,
+				//nolint: gosec // G115
 				CallCount: uint64(dependency.CallCount),
 				Source:    dependency.Source,
 			}.ApplyDefaults()

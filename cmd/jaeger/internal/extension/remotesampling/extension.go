@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/extension"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -230,8 +231,7 @@ func (ext *rsExtension) startHTTPServer(ctx context.Context, host component.Host
 
 		// In v1 the sampling endpoint in the collector was at /api/sampling, because
 		// the collector reused the same port for multiple services. In v2, the extension
-		// always uses a separate port, making /api prefix unnecessary. So we mimic the behavior
-		// of jaeger-agent port 5778 which serves sampling strategies at /sampling endpoint.
+		// always uses a separate port, making /api prefix unnecessary.
 		BasePath: "",
 	})
 	httpMux := http.NewServeMux()
@@ -257,7 +257,7 @@ func (ext *rsExtension) startHTTPServer(ctx context.Context, host component.Host
 
 		err := ext.httpServer.Serve(hln)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			ext.telemetry.ReportStatus(component.NewFatalErrorEvent(err))
+			componentstatus.ReportStatus(host, componentstatus.NewFatalErrorEvent(err))
 		}
 	}()
 
@@ -289,7 +289,7 @@ func (ext *rsExtension) startGRPCServer(ctx context.Context, host component.Host
 	go func() {
 		defer ext.shutdownWG.Done()
 		if err := ext.grpcServer.Serve(gln); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
-			ext.telemetry.ReportStatus(component.NewFatalErrorEvent(err))
+			componentstatus.ReportStatus(host, componentstatus.NewFatalErrorEvent(err))
 		}
 	}()
 

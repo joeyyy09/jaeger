@@ -12,7 +12,9 @@ import (
 
 	"github.com/gorilla/mux"
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/extension"
+	"go.opentelemetry.io/collector/extension/extensioncapabilities"
 	"go.uber.org/zap"
 
 	"github.com/jaegertracing/jaeger/cmd/jaeger/internal/extension/jaegerstorage"
@@ -20,8 +22,8 @@ import (
 )
 
 var (
-	_ extension.Extension = (*storageCleaner)(nil)
-	_ extension.Dependent = (*storageCleaner)(nil)
+	_ extension.Extension             = (*storageCleaner)(nil)
+	_ extensioncapabilities.Dependent = (*storageCleaner)(nil)
 )
 
 const (
@@ -79,7 +81,7 @@ func (c *storageCleaner) Start(_ context.Context, host component.Host) error {
 	go func() {
 		if err := c.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			err = fmt.Errorf("error starting cleaner server: %w", err)
-			c.telset.ReportStatus(component.NewFatalErrorEvent(err))
+			componentstatus.ReportStatus(host, componentstatus.NewFatalErrorEvent(err))
 		}
 	}()
 

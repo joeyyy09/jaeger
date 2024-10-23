@@ -15,7 +15,6 @@ We gratefully welcome improvements to documentation as well as to code.
 
 ### Pre-requisites
 * Install [Go](https://golang.org/doc/install) and setup GOPATH and add $GOPATH/bin in PATH
-* Install [Yarn](https://yarnpkg.com/) for running local build with the UI
 
 This library uses Go modules to manage dependencies.
 
@@ -75,12 +74,6 @@ the source code for the UI assets (requires Node.js 6+).
 
 The assets must be compiled first with `make build-ui`, which runs Node.js build and then
 packages the assets into a Go file that is `.gitignore`-ed.
-
-The packaged assets can be enabled by providing a build tag `ui`, for example:
-
-```
-$ go run -tags ui ./cmd/all-in-one/main.go
-```
 
 `make run-all-in-one` essentially runs Jaeger all-in-one by combining both of the above
 steps into a single `make` command.

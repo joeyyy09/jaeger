@@ -19,7 +19,7 @@ import (
 // child spans do not start before or end after their parent spans.
 //
 // The algorithm assumes that all spans have unique IDs, so the trace may need
-// to go through another adjuster first, such as SpanIDDeduper.
+// to go through another adjuster first, such as ZipkinSpanIDUniquifier.
 //
 // This adjuster never returns any errors. Instead it records any issues
 // it encounters in Span.Warnings.
@@ -76,6 +76,7 @@ func hostKey(span *model.Span) string {
 		if tag.VType == model.Int64Type {
 			var buf [4]byte // avoid heap allocation
 			ip := buf[0:4]  // utils require a slice, not an array
+			//nolint: gosec // G115
 			binary.BigEndian.PutUint32(ip, uint32(tag.Int64()))
 			return net.IP(ip).String()
 		}

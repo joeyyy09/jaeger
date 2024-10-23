@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/configauth"
 	"go.opentelemetry.io/collector/config/configgrpc"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
@@ -23,6 +25,7 @@ import (
 
 	"github.com/jaegertracing/jaeger/pkg/config"
 	"github.com/jaegertracing/jaeger/pkg/metrics"
+	"github.com/jaegertracing/jaeger/pkg/tenancy"
 	"github.com/jaegertracing/jaeger/plugin/storage/grpc/shared"
 	"github.com/jaegertracing/jaeger/plugin/storage/grpc/shared/mocks"
 	"github.com/jaegertracing/jaeger/storage"
@@ -87,9 +90,7 @@ func makeFactory(t *testing.T) *Factory {
 	f.InitFromViper(viper.New(), zap.NewNop())
 	require.NoError(t, f.Initialize(metrics.NullFactory, zap.NewNop()))
 
-	keepServices := f.services
 	t.Cleanup(func() {
-		keepServices.Close()
 		f.Close()
 	})
 
@@ -98,14 +99,14 @@ func makeFactory(t *testing.T) *Factory {
 }
 
 func TestNewFactoryError(t *testing.T) {
-	cfg := &ConfigV2{
+	cfg := &Config{
 		ClientConfig: configgrpc.ClientConfig{
 			// non-empty Auth is currently not supported
 			Auth: &configauth.Authentication{},
 		},
 	}
 	t.Run("with_config", func(t *testing.T) {
-		_, err := NewFactoryWithConfig(*cfg, metrics.NullFactory, zap.NewNop())
+		_, err := NewFactoryWithConfig(*cfg, metrics.NullFactory, zap.NewNop(), componenttest.NewNopHost())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "authenticator")
 	})
@@ -113,10 +114,23 @@ func TestNewFactoryError(t *testing.T) {
 	t.Run("viper", func(t *testing.T) {
 		f := NewFactory()
 		f.InitFromViper(viper.New(), zap.NewNop())
-		f.configV2 = cfg
+		f.config = *cfg
 		err := f.Initialize(metrics.NullFactory, zap.NewNop())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "authenticator")
+	})
+
+	t.Run("client", func(t *testing.T) {
+		// this is a silly test to verify handling of error from grpc.NewClient, which cannot be induced via params.
+		f, err := NewFactoryWithConfig(Config{}, metrics.NullFactory, zap.NewNop(), componenttest.NewNopHost())
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, f.Close()) })
+		newClientFn := func(_ ...grpc.DialOption) (conn *grpc.ClientConn, err error) {
+			return nil, errors.New("test error")
+		}
+		_, err = f.newRemoteStorage(component.TelemetrySettings{}, newClientFn)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "error creating remote storage client")
 	})
 }
 
@@ -149,15 +163,18 @@ func TestGRPCStorageFactoryWithConfig(t *testing.T) {
 	}()
 	defer s.Stop()
 
-	cfg := ConfigV2{
+	cfg := Config{
 		ClientConfig: configgrpc.ClientConfig{
 			Endpoint: lis.Addr().String(),
 		},
-		TimeoutSettings: exporterhelper.TimeoutSettings{
+		TimeoutConfig: exporterhelper.TimeoutConfig{
 			Timeout: 1 * time.Second,
 		},
+		Tenancy: tenancy.Options{
+			Enabled: true,
+		},
 	}
-	f, err := NewFactoryWithConfig(cfg, metrics.NullFactory, zap.NewNop())
+	f, err := NewFactoryWithConfig(cfg, metrics.NullFactory, zap.NewNop(), componenttest.NewNopHost())
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 }
@@ -249,7 +266,7 @@ func TestWithCLIFlags(t *testing.T) {
 	})
 	require.NoError(t, err)
 	f.InitFromViper(v, zap.NewNop())
-	assert.Equal(t, "foo:1234", f.configV1.RemoteServerAddr)
+	assert.Equal(t, "foo:1234", f.config.ClientConfig.Endpoint)
 	require.NoError(t, f.Close())
 }
 
